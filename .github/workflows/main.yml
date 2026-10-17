@@ -1,0 +1,58 @@
+
+name: Build StudyDesk Windows Installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Download project
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Build StudyDesk
+        run: mvn -B clean package
+
+      - name: Create Windows installer
+        shell: pwsh
+        run: |
+          $jar = Get-ChildItem target -Filter "*.jar" |
+            Where-Object { $_.Name -notlike "original-*" } |
+            Select-Object -First 1
+
+          if (-not $jar) {
+            throw "Could not find the application JAR in target."
+          }
+
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+
+          jpackage `
+            --type exe `
+            --name StudyDesk `
+            --input target `
+            --main-jar $jar.Name `
+            --dest dist `
+            --app-version 1.0.0 `
+            --vendor StudyDesk `
+            --win-menu `
+            --win-shortcut `
+            --java-options "-Dfile.encoding=UTF-8"
+
+      - name: Save installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: StudyDesk-Windows-Installer
+          path: dist/*.exe
+          if-no-files-found: error
