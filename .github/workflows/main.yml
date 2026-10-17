@@ -10,6 +10,7 @@ on:
 jobs:
   build-windows:
     runs-on: windows-latest
+
     steps:
       - name: Download project
         uses: actions/checkout@v4
@@ -24,20 +25,38 @@ jobs:
       - name: Build StudyDesk
         run: mvn -B clean package
 
+      - name: Check packaged JAR files
+        shell: pwsh
+        run: |
+          Get-ChildItem target -Filter "*.jar" |
+            Select-Object Name
+
       - name: Create Windows installer
         shell: pwsh
         run: |
-          $jar = Get-ChildItem target -Filter "*.jar" |
+          $jar = Get-ChildItem target -Filter "studydesk-*.jar" |
             Where-Object { $_.Name -notlike "original-*" } |
             Select-Object -First 1
 
           if (-not $jar) {
-            throw "Could not find the application JAR in target."
+            throw "Could not find the StudyDesk application JAR in target."
           }
 
           New-Item -ItemType Directory -Force -Path dist | Out-Null
 
-          jpackage --type exe --name StudyDesk --input target --main-jar $jar.Name --main-class com.studydesk.Main --dest dist --app-version 1.0.0 --vendor StudyDesk --win-menu --win-shortcut --java-options "-Dfile.encoding=UTF-8"
+          jpackage `
+            --type exe `
+            --name StudyDesk `
+            --input target `
+            --main-jar $jar.Name `
+            --main-class com.studydesk.Main `
+            --class-path "*" `
+            --dest dist `
+            --app-version 1.0.0 `
+            --vendor StudyDesk `
+            --win-menu `
+            --win-shortcut `
+            --java-options "-Dfile.encoding=UTF-8"
 
           if ($LASTEXITCODE -ne 0) {
             throw "jpackage failed with exit code $LASTEXITCODE"
