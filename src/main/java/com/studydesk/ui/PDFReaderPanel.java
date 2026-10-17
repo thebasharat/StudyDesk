@@ -102,34 +102,45 @@ public final class PDFReaderPanel {
 
     /** Opens the professional reader window for the supplied PDF file. */
     public static void open(JFrame parent, File pdfFile) {
-        if (pdfFile == null || !pdfFile.isFile()) {
-            JOptionPane.showMessageDialog(parent, "The PDF file could not be found.",
-                    "Open PDF", JOptionPane.ERROR_MESSAGE);
-            return;
-        }
-
-        // Loading a large PDF can take time, so do it off the UI thread too.
-        Thread loader = new Thread(() -> {
-            PDDocument loaded = null;
-            try {
-                loaded = Loader.loadPDF(pdfFile);
-                PDDocument readyDocument = loaded;
-                SwingUtilities.invokeLater(() -> {
-                    PDFReaderPanel reader = new PDFReaderPanel(parent, pdfFile, readyDocument);
-                    reader.frame.setVisible(true);
-                });
-            } catch (IOException ex) {
-                if (loaded != null) {
-                    try { loaded.close(); } catch (IOException ignored) { }
-                }
-                SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(parent,
-                        "Could not open this PDF:\n" + ex.getMessage(),
-                        "PDF Error", JOptionPane.ERROR_MESSAGE));
-            }
-        }, "StudyDesk-PDF-Loader");
-        loader.setDaemon(true);
-        loader.start();
+    if (pdfFile == null || !pdfFile.isFile()) {
+        JOptionPane.showMessageDialog(parent, "The PDF file could not be found.",
+                "Open PDF", JOptionPane.ERROR_MESSAGE);
+        return;
     }
+
+    Thread loader = new Thread(() -> {
+        try {
+            PDDocument loaded = Loader.loadPDF(pdfFile);
+            SwingUtilities.invokeLater(() -> {
+                try {
+                    PDFReaderPanel reader = new PDFReaderPanel(parent, pdfFile, loaded);
+                    reader.frame.setVisible(true);
+                } catch (Throwable t) {
+                    try { loaded.close(); } catch (IOException ignored) { }
+                    showOpenError(parent, t);
+                }
+            });
+        } catch (Throwable t) {          // not just IOException
+            showOpenError(parent, t);
+        }
+    }, "StudyDesk-PDF-Loader");
+    loader.setDaemon(true);
+    loader.start();
+}
+
+private static void showOpenError(JFrame parent, Throwable t) {
+    java.io.StringWriter sw = new java.io.StringWriter();
+    t.printStackTrace(new java.io.PrintWriter(sw));
+    try {
+        Path log = Path.of(System.getProperty("user.home"), "StudyDesk", "error.log");
+        Files.createDirectories(log.getParent());
+        Files.writeString(log, sw.toString());
+    } catch (IOException ignored) { }
+
+    SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(parent,
+            "Could not open this PDF:\n" + t + "\n\nDetails saved to ~/StudyDesk/error.log",
+            "PDF Error", JOptionPane.ERROR_MESSAGE));
+}
 
     private void buildInterface(JFrame parent) {
         frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
